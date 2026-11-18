@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="MLA" href="mla.html"><link rel="prev" title="Attention" href="attention.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="MHC" href="mhc.html"><link rel="prev" title="Attention" href="attention.html">
         <link rel="prefetch" href="../_static/halops-logo-light.svg" as="image">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
@@ -210,6 +210,7 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="attention.html">Attention</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">GEMM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mhc.html">MHC</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mla.html">MLA</a></li>
 <li class="toctree-l1"><a class="reference internal" href="moe.html">MOE</a></li>
 </ul>
@@ -291,6 +292,9 @@
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#halops.rms_norm_quant" title="halops.rms_norm_quant"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rms_norm_quant</span></code></a></p></td>
 <td><p>RMSNorm fused with W8A8-MXFP8 quantization.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#halops.sigmoid_gate_mul_group_quant" title="halops.sigmoid_gate_mul_group_quant"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sigmoid_gate_mul_group_quant</span></code></a></p></td>
+<td><p>Sigmoid gating fused with W8A8-MXFP8 quantization.</p></td>
 </tr>
 </tbody>
 </table>
@@ -993,18 +997,15 @@ of bounds (illegal memory access). Size it with headroom above
 <dd><em class="sig-param"><span class="n"><span class="pre">input</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">weight</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">return_bf16</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">use_swizzle</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">use_pdl</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">output_quant</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">output_sf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">output_bf16</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#halops.rms_norm_quant" title="Link to this definition">¶</a></dt>
 <dd><p>RMSNorm fused with W8A8-MXFP8 quantization.</p>
 <p>Computes <code class="docutils literal notranslate"><span class="pre">y</span> <span class="pre">=</span> <span class="pre">bf16(x</span> <span class="pre">*</span> <span class="pre">rsqrt(mean(x^2)</span> <span class="pre">+</span> <span class="pre">eps)</span> <span class="pre">*</span> <span class="pre">weight)</span></code> in fp32 and
-quantizes it exactly as <code class="docutils literal notranslate"><span class="pre">group_wise_quant(y,</span> <span class="pre">&quot;w8a8-mxfp8&quot;)</span></code> does, reading
-<code class="docutils literal notranslate"><span class="pre">x</span></code> once.</p>
+quantizes it exactly as <code class="docutils literal notranslate"><span class="pre">group_wise_quant(y,</span> <span class="pre">&quot;w8a8-mxfp8&quot;,</span> <span class="pre">use_swizzle)</span></code>
+does, reading <code class="docutils literal notranslate"><span class="pre">x</span></code> once.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -1013,25 +1014,23 @@ quantizes it exactly as <code class="docutils literal notranslate"><span class="
 multiple of 128 and at most 8192.</p></li>
 <li><p><strong>weight</strong> (<em>torch.Tensor</em>) – [K] bfloat16 RMSNorm gamma.</p></li>
 <li><p><strong>eps</strong> (<em>float</em>) – RMSNorm epsilon.</p></li>
-<li><p><strong>return_bf16</strong> (<em>bool</em>) – Also return the bfloat16 <code class="docutils literal notranslate"><span class="pre">y</span></code>.</p></li>
+<li><p><strong>use_swizzle</strong> (<em>bool</em>) – Write the scales in the CUTLASS SfAtom layout (default),
+or row-major as <code class="docutils literal notranslate"><span class="pre">low_latency_mma_gemm</span></code> reads them.</p></li>
 <li><p><strong>use_pdl</strong> (<em>bool</em>) – Enable Programmatic Dependent Launch (on by default).</p></li>
-<li><p><strong>output_quant</strong> (<em>torch.Tensor</em><em> | </em><em>None</em>) – Optional pre-allocated contiguous [M, K] float8_e4m3fn.</p></li>
-<li><p><strong>output_sf</strong> (<em>torch.Tensor</em><em> | </em><em>None</em>) – Optional pre-allocated contiguous scale buffer.</p></li>
-<li><p><strong>output_bf16</strong> (<em>torch.Tensor</em><em> | </em><em>None</em>) – Optional pre-allocated contiguous [M, K] bfloat16 <code class="docutils literal notranslate"><span class="pre">y</span></code>;
-implies <code class="docutils literal notranslate"><span class="pre">return_bf16</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><p><code class="docutils literal notranslate"><span class="pre">(output_quant,</span> <span class="pre">output_sf)</span></code>, plus the bfloat16 <code class="docutils literal notranslate"><span class="pre">y</span></code> when requested –</p>
+<dd class="field-even"><p><p><code class="docutils literal notranslate"><span class="pre">(q,</span> <span class="pre">sf)</span></code> –</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">output_quant</span></code>: [M, K] float8_e4m3fn</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">output_sf</span></code>: [ceil(M / 128) * 128, K / 32] uint8 UE8M0 scales in
-the CUTLASS SfAtom layout (padding rows hold 0)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">q</span></code>: [M, K] float8_e4m3fn</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sf</span></code>: uint8 UE8M0 scales, [ceil(M / 128) * 128, K / 32] in
+the CUTLASS SfAtom layout (padding rows hold 0) with <code class="docutils literal notranslate"><span class="pre">use_swizzle</span></code>,
+else row-major [M, K / 32]</p></li>
 </ul>
 </p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><em>Tuple</em>[torch.Tensor, torch.Tensor] | <em>Tuple</em>[torch.Tensor, torch.Tensor, torch.Tensor]</p>
+<dd class="field-odd"><p><em>Tuple</em>[torch.Tensor, torch.Tensor]</p>
 </dd>
 </dl>
 <p class="rubric">Example</p>
@@ -1045,6 +1044,42 @@ the CUTLASS SfAtom layout (padding rows hold 0)</p></li>
 </dd></dl>
 
 </section>
+<section class="api-entry" id="sigmoid-gate-mul-group-quant">
+<h2>sigmoid_gate_mul_group_quant<a class="headerlink" href="#sigmoid-gate-mul-group-quant" title="Link to this heading">¶</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="halops.sigmoid_gate_mul_group_quant">
+<span class="sig-name descname"><span class="pre">sigmoid_gate_mul_group_quant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">o</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_pdl</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#halops.sigmoid_gate_mul_group_quant" title="Link to this definition">¶</a></dt>
+<dd><p>Sigmoid gating fused with W8A8-MXFP8 quantization.</p>
+<p>Computes <code class="docutils literal notranslate"><span class="pre">y</span> <span class="pre">=</span> <span class="pre">o</span> <span class="pre">*</span> <span class="pre">torch.sigmoid(gate)</span></code> on the bfloat16 inputs and
+quantizes it exactly as <code class="docutils literal notranslate"><span class="pre">group_wise_quant(y,</span> <span class="pre">use_swizzle=False)</span></code> does.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>o</strong> (<em>torch.Tensor</em>) – [T, hidden] bfloat16 tensor; rows may be strided (<code class="docutils literal notranslate"><span class="pre">stride(1)</span> <span class="pre">==</span>
+<span class="pre">1</span></code>, 16-byte aligned row starts). hidden must be a multiple of 32.</p></li>
+<li><p><strong>gate</strong> (<em>torch.Tensor</em>) – [T, hidden] bfloat16 tensor, same layout rules as <code class="docutils literal notranslate"><span class="pre">o</span></code>.</p></li>
+<li><p><strong>use_pdl</strong> (<em>bool</em>) – Enable Programmatic Dependent Launch (on by default).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">(q,</span> <span class="pre">sf)</span></code> – [T, hidden] float8_e4m3fn codes and [T, hidden / 32]
+uint8 UE8M0 scales in row-major layout.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>Tuple</em>[torch.Tensor, torch.Tensor]</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">halops</span><span class="w"> </span><span class="kn">import</span> <span class="n">sigmoid_gate_mul_group_quant</span>
+
+<span class="n">o</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4096</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+<span class="n">gate</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4096</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+<span class="n">q</span><span class="p">,</span> <span class="n">sf</span> <span class="o">=</span> <span class="n">sigmoid_gate_mul_group_quant</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">gate</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
 </section>
 
         </article>
@@ -1052,12 +1087,12 @@ the CUTLASS SfAtom layout (padding rows hold 0)</p></li>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="mla.html">
+          <a class="next-page" href="mhc.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">MLA</div>
+                <div class="title">MHC</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -1113,6 +1148,7 @@ the CUTLASS SfAtom layout (padding rows hold 0)</p></li>
 <li><a class="reference internal" href="#low-latency-mma-gemm">low_latency_mma_gemm</a></li>
 <li><a class="reference internal" href="#prefill-permute-to-masked-gemm">prefill_permute_to_masked_gemm</a></li>
 <li><a class="reference internal" href="#rms-norm-quant">rms_norm_quant</a></li>
+<li><a class="reference internal" href="#sigmoid-gate-mul-group-quant">sigmoid_gate_mul_group_quant</a></li>
 </ul>
 </li>
 </ul>
